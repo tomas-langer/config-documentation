@@ -15,6 +15,7 @@
  */
 package io.helidon.tools.config.metadata;
 
+import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -30,15 +31,25 @@ public class Main {
      * @param args expects the GAV of documented module and target directory
      */
     public static void main(String[] args) throws Exception {
-        if (args.length != 2) {
-            throw new IllegalArgumentException("This tool requires two parameters: module name, and the target path");
+        if (args.length != 2 && args.length != 3) {
+            throw new IllegalArgumentException("This tool requires two parameters: module name, the target path and optionally "
+                                                       + "relative path to the generated docs from the file they will be included in");
         }
         String module = args[0];
         String targetPath = args[1];
+        String relativePath;
+        if (args.length == 2) {
+            relativePath = "../../shared/config/";
+        } else {
+            relativePath = args[2];
+            if (!relativePath.endsWith(File.separator) && !relativePath.endsWith("/")) {
+                relativePath += "/";
+            }
+        }
 
         Path path = Paths.get(targetPath).toAbsolutePath().normalize();
         if (Files.exists(path) && Files.isDirectory(path)) {
-            ConfigDocumentation docs = new ConfigDocumentation(path, modulePredicate(module));
+            ConfigDocumentation docs = new ConfigDocumentation(path, relativePath, modulePredicate(module));
             docs.process();
         } else {
             throw new IllegalArgumentException("This tool requires two parameters: module name, and the target path. "
