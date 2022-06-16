@@ -34,8 +34,8 @@ import java.util.Map;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
-import javax.json.bind.Jsonb;
-import javax.json.bind.JsonbBuilder;
+import jakarta.json.bind.Jsonb;
+import jakarta.json.bind.JsonbBuilder;
 
 import com.github.jknack.handlebars.Handlebars;
 import com.github.jknack.handlebars.Template;
@@ -59,10 +59,12 @@ class ConfigDocumentation {
     }
 
     private final Path path;
+    private final String relativePath;
     private final Predicate<String> modulePredicate;
 
-    ConfigDocumentation(Path path, Predicate<String> modulePredicate) {
+    ConfigDocumentation(Path path, String relativePath, Predicate<String> modulePredicate) {
         this.path = path;
+        this.relativePath = relativePath;
         this.modulePredicate = modulePredicate;
     }
 
@@ -98,12 +100,13 @@ class ConfigDocumentation {
         // we now need to resolve all inheritances
         for (CmModule module : allModules) {
             if (modulePredicate.test(module.getModule())) {
-                moduleDocs(template, configuredTypes, path, module);
+                moduleDocs(template, configuredTypes, path, relativePath, module);
             }
         }
     }
 
-    private static void moduleDocs(Template template, Map<String, CmType> configuredTypes, Path modulePath, CmModule module)
+    private static void moduleDocs(Template template, Map<String, CmType> configuredTypes, Path modulePath,
+                                   String relativePath, CmModule module)
             throws IOException {
         System.out.println("Documenting module " + module.getModule());
         // each type will have its own, such as:
@@ -112,14 +115,14 @@ class ConfigDocumentation {
             Path typePath = modulePath.resolve(type.getType() + ".adoc");
             // just overwrite
             Files.writeString(typePath,
-                              typeFile(template, type),
+                              typeFile(template, type, relativePath),
                               StandardOpenOption.TRUNCATE_EXISTING,
                               StandardOpenOption.CREATE);
             // now write the relevant json
         }
     }
 
-    private static CharSequence typeFile(Template template, CmType type) throws IOException {
+    private static CharSequence typeFile(Template template, CmType type, String relativePath) throws IOException {
         boolean hasRequired = false;
         boolean hasOptional = false;
         for (CmOption option : type.getOptions()) {
@@ -128,7 +131,7 @@ class ConfigDocumentation {
             } else {
                 hasOptional = true;
             }
-            option.setRefType(mapType(option));
+            option.setRefType(mapType(option, relativePath));
         }
 
         Map<String, Object> context = Map.of("year", ZonedDateTime.now().getYear(),
@@ -138,7 +141,7 @@ class ConfigDocumentation {
         return template.apply(context);
     }
 
-    private static String mapType(CmOption option) {
+    private static String mapType(CmOption option, String relativePath) {
         String type = option.getType();
         String mapped = TYPE_MAPPING.get(type);
         CmOption.Kind kind = option.getKind();
@@ -156,7 +159,7 @@ class ConfigDocumentation {
                 if (type.equals("io.helidon.config.Config")) {
                     return "Map&lt;string, string&gt; (documented for specific cases)";
                 }
-                return "link:" + type + ".adoc[" + displayType + "]" + (option.isMerge() ? " (merged)" : "");
+                return "link:" + relativePath + "" + type + ".adoc[" + displayType + "]" + (option.isMerge() ? " (merged)" : "");
             }
         }
         return displayType;
