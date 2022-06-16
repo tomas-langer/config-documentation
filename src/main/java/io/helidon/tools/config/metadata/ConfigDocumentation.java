@@ -34,17 +34,16 @@ import java.util.Map;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
-import jakarta.json.bind.Jsonb;
-import jakarta.json.bind.JsonbBuilder;
-
 import com.github.jknack.handlebars.Handlebars;
 import com.github.jknack.handlebars.Template;
 import com.github.jknack.handlebars.io.URLTemplateSource;
+import jakarta.json.bind.Jsonb;
+import jakarta.json.bind.JsonbBuilder;
 import org.eclipse.yasson.YassonConfig;
 
 class ConfigDocumentation {
-    private static final Map<String, String> TYPE_MAPPING;
     private static final Jsonb JSON_B = JsonbBuilder.create(new YassonConfig().withFailOnUnknownProperties(true));
+    private static final Map<String, String> TYPE_MAPPING;
 
     static {
         Map<String, String> typeMapping = new HashMap<>();
@@ -87,38 +86,55 @@ class ConfigDocumentation {
             }
         }
 
+        // map of annotated types to documentation
         Map<String, CmType> configuredTypes = new HashMap<>();
 
         for (CmModule module : allModules) {
             for (CmType type : module.getTypes()) {
-                configuredTypes.put(type.getType(), type);
+                configuredTypes.put(type.getAnnotatedType(), type);
             }
         }
 
+        // add all inherited options to each type
         resolveInheritance(configuredTypes);
+        // add all options from merged types as direct options to each type
+        resolveMerges(configuredTypes);
 
-        // we now need to resolve all inheritances
         for (CmModule module : allModules) {
             if (modulePredicate.test(module.getModule())) {
-                moduleDocs(template, configuredTypes, path, relativePath, module);
+                // document module that is included by the predicate
+                moduleDocs(template, path, relativePath, module);
             }
         }
     }
 
-    private static void moduleDocs(Template template, Map<String, CmType> configuredTypes, Path modulePath,
-                                   String relativePath, CmModule module)
-            throws IOException {
+    private static void moduleDocs(Template template,
+                                   Path modulePath,
+                                   String relativePath,
+                                   CmModule module) throws IOException {
         System.out.println("Documenting module " + module.getModule());
         // each type will have its own, such as:
         // docs/io.helidon.common.configurable/LruCache.adoc
         for (CmType type : module.getTypes()) {
+            CharSequence fileContent = typeFile(template, type, relativePath);
+
             Path typePath = modulePath.resolve(type.getType() + ".adoc");
-            // just overwrite
+            // Write the target type
             Files.writeString(typePath,
-                              typeFile(template, type, relativePath),
+                              fileContent,
                               StandardOpenOption.TRUNCATE_EXISTING,
                               StandardOpenOption.CREATE);
-            // now write the relevant json
+
+            if (!type.getAnnotatedType().startsWith(type.getType())) {
+                // generate two docs, just to make sure we do not have a conflict
+                // example: Zipkin and Jaeger generate target type io.opentracing.Tracer, yet we need separate documents
+                Path annotatedTypePath = modulePath.resolve(type.getAnnotatedType() + ".adoc");
+                // Write the annotated type (needed for Jaeger & Zipkin that produce the same target)
+                Files.writeString(annotatedTypePath,
+                                  fileContent,
+                                  StandardOpenOption.TRUNCATE_EXISTING,
+                                  StandardOpenOption.CREATE);
+            }
         }
     }
 
@@ -159,7 +175,7 @@ class ConfigDocumentation {
                 if (type.equals("io.helidon.config.Config")) {
                     return "Map&lt;string, string&gt; (documented for specific cases)";
                 }
-                return "link:" + relativePath + "" + type + ".adoc[" + displayType + "]" + (option.isMerge() ? " (merged)" : "");
+                return "link:" + relativePath + "" + type + ".adoc[" + displayType + "]";
             }
         }
         return displayType;
@@ -205,6 +221,52 @@ class ConfigDocumentation {
                 + " (" + values.stream().map(CmAllowedValue::getValue).collect(Collectors.joining(", ")) + ")";
     }
 
+    private void resolveMerges(Map<String, CmType> configuredTypes) {
+        List<CmType> remaining = new ArrayList<>(configuredTypes.values());
+        Map<String, CmType> resolved = new HashMap<>();
+        boolean shouldExit = false;
+        while (!shouldExit) {
+            shouldExit = true;
+
+            for (int i = 0; i < remaining.size(); i++) {
+                CmType next = remaining.get(i);
+                boolean isResolved = true;
+                List<CmOption> options = next.getOptions();
+                for (int j = 0; j < options.size(); j++) {
+                    CmOption option = options.get(j);
+                    if (option.isMerge()) {
+                        isResolved = false;
+                        if (resolved.containsKey(option.getType())) {
+                            options.remove(j);
+                            options.addAll(resolved.get(option.getType()).getOptions());
+                            shouldExit = false;
+                            break;
+                        }
+                    }
+                }
+
+                if (isResolved) {
+                    resolved.put(next.getType(), next);
+                    remaining.remove(i);
+                    shouldExit = false;
+                    break;
+                }
+            }
+        }
+
+        if (remaining.size() > 0) {
+            System.err.println("There are types with merged type that is not on classpath: ");
+            for (CmType cmType : remaining) {
+                for (CmOption option : cmType.getOptions()) {
+                    if (option.isMerge()) {
+                        System.err.println("Option " + option.getKey() + ", merges: " + option.getType());
+                    }
+                }
+
+            }
+        }
+    }
+
     private void resolveInheritance(Map<String, CmType> configuredTypes) {
         Map<String, CmType> resolved = new HashMap<>();
         List<CmType> remaining = new ArrayList<>(configuredTypes.values());
@@ -216,7 +278,7 @@ class ConfigDocumentation {
             for (int i = 0; i < remaining.size(); i++) {
                 CmType next = remaining.get(i);
                 if (next.getInherits() == null) {
-                    resolved.put(next.getType(), next);
+                    resolved.put(next.getAnnotatedType(), next);
                     didResolve = true;
                     remaining.remove(i);
                     break;
@@ -225,6 +287,7 @@ class ConfigDocumentation {
                     for (String inherit : next.getInherits()) {
                         if (!resolved.containsKey(inherit)) {
                             allExist = false;
+                            break;
                         }
                     }
                     if (allExist) {
@@ -252,7 +315,6 @@ class ConfigDocumentation {
             List<CmOption> options = new ArrayList<>(next.getOptions());
             options.addAll(cmType.getOptions());
             next.setOptions(options);
-            ;
         }
         next.setInherits(null);
     }

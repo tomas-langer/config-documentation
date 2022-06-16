@@ -20,6 +20,7 @@ import java.util.List;
 public class CmType {
 
     private String type;
+    private String annotatedType;
     private List<CmOption> options;
     private String description;
     private String prefix;
@@ -77,6 +78,14 @@ public class CmType {
         this.type = type;
     }
 
+    public String getAnnotatedType() {
+        return annotatedType;
+    }
+
+    public void setAnnotatedType(String annotatedType) {
+        this.annotatedType = annotatedType;
+    }
+
     public List<CmOption> getOptions() {
         return options;
     }
@@ -95,5 +104,10 @@ public class CmType {
 
     public boolean hasProvides() {
         return provides != null && !provides.isEmpty();
+    }
+
+    @Override
+    public String toString() {
+        return getType();
     }
 }

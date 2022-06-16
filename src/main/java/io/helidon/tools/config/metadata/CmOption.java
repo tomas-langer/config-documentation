@@ -138,6 +138,11 @@ public class CmOption {
         this.merge = merge;
     }
 
+    @Override
+    public String toString() {
+        return key + " (" + type + ")" + (merge ? " merged": "");
+    }
+
     public enum Kind {
         /**
          * Option is a single value (leaf node).

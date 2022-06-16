@@ -52,8 +52,8 @@ public class Main {
             ConfigDocumentation docs = new ConfigDocumentation(path, relativePath, modulePredicate(module));
             docs.process();
         } else {
-            throw new IllegalArgumentException("This tool requires two parameters: module name, and the target path. "
-                                                       + "Target path must be a directory and must exist");
+            throw new IllegalArgumentException("Target path must be a directory and must exist: "
+                                                       + path.toAbsolutePath().normalize());
         }
     }
 
