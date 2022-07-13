@@ -95,6 +95,8 @@ class ConfigDocumentation {
             }
         }
 
+        // translate HTML in description
+        translateHtml(configuredTypes);
         // add all inherited options to each type
         resolveInheritance(configuredTypes);
         // add all options from merged types as direct options to each type
@@ -106,6 +108,41 @@ class ConfigDocumentation {
                 moduleDocs(template, path, relativePath, module);
             }
         }
+    }
+
+    private void translateHtml(Map<String, CmType> configuredTypes) {
+        for (CmType value : configuredTypes.values()) {
+            value.getOptions().forEach(this::translateHtml);
+        }
+    }
+
+    private void translateHtml(CmOption option) {
+        String description = option.getDescription();
+        option.setDescription(translateHtml(description));
+    }
+
+    // translate HTML to asciidoc
+    static String translateHtml(String text) {
+        String result = text;
+        // <p>
+        result = result.replaceAll("\n\\s*<p>", "\n");
+        result = result.replaceAll("\\s*<p>", "\n");
+        result = result.replaceAll("</p>", "");
+        // <ul><nl><li>
+        result = result.replaceAll("\\s*</li>\\s*", "");
+        result = result.replaceAll("\\s*</ul>\\s*", "\n\n");
+        result = result.replaceAll("\\s*</nl>\\s*", "\n\n");
+        result = result.replaceAll("\n\\s*<ul>\\s*", "\n");
+        result = result.replaceAll("\\s*<ul>\\s*", "\n");
+        result = result.replaceAll("\n\\s*<nl>\\s*", "\n");
+        result = result.replaceAll("\\s*<nl>\\s*", "\n");
+        result = result.replaceAll("<li>\\s*", "\n- ");
+        // also fix javadoc issues
+        // {@value}
+        result = result.replaceAll("\\{@value\\s+#?(.*?)}", "`$1`");
+        // {@link}
+        result = result.replaceAll("\\{@link\\s+#?(.*?)}", "`$1`");
+        return result;
     }
 
     private static void moduleDocs(Template template,
@@ -175,7 +212,7 @@ class ConfigDocumentation {
                 if (type.equals("io.helidon.config.Config")) {
                     return "Map&lt;string, string&gt; (documented for specific cases)";
                 }
-                return "link:" + relativePath + "" + type + ".adoc[" + displayType + "]";
+                return "xref:" + relativePath + type + ".adoc[" + displayType + "]";
             }
         }
         return displayType;

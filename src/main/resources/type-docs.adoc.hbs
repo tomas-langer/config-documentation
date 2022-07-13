@@ -16,6 +16,7 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
+ifndef::rootdir[:rootdir: {docdir}/../..]
 :description: Configuration of {{type.type}}
 :keywords: helidon, config, {{type.type}}
 :basic-table-intro: The table below lists the configuration keys that configure {{type.type}}
@@ -40,7 +41,7 @@ This is a standalone configuration type, prefix from configuration root: `{{type
 
 {{#if hasRequired}}
 Required configuration options:
-[cols="3,3,2,5"]
+[cols="3,3,2,5a"]
 |===
 |key |type |default value |description
 
@@ -51,7 +52,7 @@ Required configuration options:
 
 {{#if hasOptional}}
 Optional configuration options:
-[cols="3,3,2,5"]
+[cols="3,3,2,5a"]
 
 |===
 |key |type |default value |description
