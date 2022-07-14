@@ -18,8 +18,8 @@ package io.helidon.tools.config.metadata;
 import java.util.List;
 
 public class CmType {
-
     private String type;
+    private String title;
     private String annotatedType;
     private List<CmOption> options;
     private String description;
@@ -29,6 +29,8 @@ public class CmType {
     private List<String> producers;
 
     private List<String> provides;
+
+    private String typeReference;
 
     public String getDescription() {
         return description;
@@ -104,6 +106,22 @@ public class CmType {
 
     public boolean hasProvides() {
         return provides != null && !provides.isEmpty();
+    }
+
+    public String getTypeReference() {
+        return typeReference;
+    }
+
+    public void setTypeReference(String typeReference) {
+        this.typeReference = typeReference;
+    }
+
+    public String getTitle() {
+        return title;
+    }
+
+    public void setTitle(String title) {
+        this.title = title;
     }
 
     @Override

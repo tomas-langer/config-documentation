@@ -26,12 +26,16 @@ import java.nio.file.StandardOpenOption;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Predicate;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import com.github.jknack.handlebars.Handlebars;
@@ -42,6 +46,7 @@ import jakarta.json.bind.JsonbBuilder;
 import org.eclipse.yasson.YassonConfig;
 
 class ConfigDocumentation {
+    private static final Pattern MODULE_PATTERN = Pattern.compile("(.*?)(\\.spi)?\\.([a-zA-Z0-9]*?)");
     private static final Jsonb JSON_B = JsonbBuilder.create(new YassonConfig().withFailOnUnknownProperties(true));
     private static final Map<String, String> TYPE_MAPPING;
 
@@ -101,13 +106,86 @@ class ConfigDocumentation {
         resolveInheritance(configuredTypes);
         // add all options from merged types as direct options to each type
         resolveMerges(configuredTypes);
+        // resolve type reference (for javadocs)
+        resolveTypeReference(configuredTypes);
+        // add titles (remove io.helidon from package or similar)
+        addTitle(configuredTypes);
 
+        List<String> generatedFiles = new LinkedList<>();
         for (CmModule module : allModules) {
             if (modulePredicate.test(module.getModule())) {
                 // document module that is included by the predicate
-                moduleDocs(template, path, relativePath, module);
+                moduleDocs(template, path, relativePath, module, generatedFiles);
             }
         }
+
+        // sort alphabetically by page title
+        generatedFiles.sort((a, b) -> titleFromFileName(a).compareTo(titleFromFileName(b)));
+        // print out the list of files to be added to sitegen.yaml
+        System.out.println("Update sitegen.yaml with the following values (Config docs section)");
+
+        for (String generatedFile : generatedFiles) {
+            System.out.println("            - \"" + generatedFile + "\"");
+        }
+    }
+
+    private String titleFromFileName(String fileName) {
+        String title = fileName;
+        if (title.startsWith("io_helidon_")) {
+            title = title.substring("io_helidon_".length());
+            int i = title.lastIndexOf('_');
+            if (i != -1) {
+                String simpleName = title.substring(i + 1);
+                String thePackage = title.substring(0, i);
+                title = simpleName + " (" + thePackage + ")";
+            }
+        }
+        return title;
+    }
+
+    private void addTitle(Map<String, CmType> configuredTypes) {
+        for (CmType value : configuredTypes.values()) {
+            value.setTitle(title(value.getType()));
+        }
+    }
+
+    private static String title(String typeName) {
+        String title = typeName;
+        if (title.startsWith("io.helidon.")) {
+            title = title.substring("io.helidon.".length());
+            int i = title.lastIndexOf('.');
+            if (i != -1) {
+                String simpleName = title.substring(i + 1);
+                String thePackage = title.substring(0, i);
+                title = simpleName + " (" + thePackage + ")";
+            }
+        }
+        return title;
+    }
+
+    private void resolveTypeReference(Map<String, CmType> configuredTypes) {
+        for (CmType value : configuredTypes.values()) {
+            value.setTypeReference(resolveTypeReference(value.getType()));
+        }
+    }
+
+    private String resolveTypeReference(String type) {
+        if (type.startsWith("io.helidon")) {
+            // our type
+            return resolveModuleFromType(type);
+        } else {
+            // no reference
+            return type;
+        }
+    }
+
+    private String resolveModuleFromType(String type) {
+        Matcher m = MODULE_PATTERN.matcher(type);
+        if (m.matches()) {
+            String moduleName = m.group(1);
+            return "link:{javadoc-base-url}/" + moduleName + "/" + type + "[" + type + "]";
+        }
+        return type;
     }
 
     private void translateHtml(Map<String, CmType> configuredTypes) {
@@ -148,14 +226,18 @@ class ConfigDocumentation {
     private static void moduleDocs(Template template,
                                    Path modulePath,
                                    String relativePath,
-                                   CmModule module) throws IOException {
+                                   CmModule module,
+                                   List<String> generatedFiles) throws IOException {
         System.out.println("Documenting module " + module.getModule());
         // each type will have its own, such as:
         // docs/io.helidon.common.configurable/LruCache.adoc
         for (CmType type : module.getTypes()) {
+            sortOptions(type);
             CharSequence fileContent = typeFile(template, type, relativePath);
 
-            Path typePath = modulePath.resolve(type.getType() + ".adoc");
+            String fileName = type.getType().replace('.', '_') + ".adoc";
+            Path typePath = modulePath.resolve(fileName);
+            generatedFiles.add(fileName);
             // Write the target type
             Files.writeString(typePath,
                               fileContent,
@@ -173,6 +255,12 @@ class ConfigDocumentation {
                                   StandardOpenOption.CREATE);
             }
         }
+    }
+
+    private static void sortOptions(CmType type) {
+        List<CmOption> options = new ArrayList<>(type.getOptions());
+        options.sort(Comparator.comparing(CmOption::getKey));
+        type.setOptions(options);
     }
 
     private static CharSequence typeFile(Template template, CmType type, String relativePath) throws IOException {
@@ -212,7 +300,7 @@ class ConfigDocumentation {
                 if (type.equals("io.helidon.config.Config")) {
                     return "Map&lt;string, string&gt; (documented for specific cases)";
                 }
-                return "xref:" + relativePath + type + ".adoc[" + displayType + "]";
+                return "xref:" + relativePath + type.replace('.', '_') + ".adoc[" + displayType + "]";
             }
         }
         return displayType;

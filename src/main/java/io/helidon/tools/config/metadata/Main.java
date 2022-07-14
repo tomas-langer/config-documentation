@@ -39,7 +39,7 @@ public class Main {
         String targetPath = args[1];
         String relativePath;
         if (args.length == 2) {
-            relativePath = "{rootdir}/includes/config/";
+            relativePath = "{rootdir}/config/";
         } else {
             relativePath = args[2];
             if (!relativePath.endsWith(File.separator) && !relativePath.endsWith("/")) {

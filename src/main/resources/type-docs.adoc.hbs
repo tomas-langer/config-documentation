@@ -16,29 +16,37 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-ifndef::rootdir[:rootdir: {docdir}/../..]
+ifndef::rootdir[:rootdir: {docdir}/..]
 :description: Configuration of {{type.type}}
 :keywords: helidon, config, {{type.type}}
 :basic-table-intro: The table below lists the configuration keys that configure {{type.type}}
+include::{rootdir}/includes/attributes.adoc[]
 
-[source,text]
-.Type
-----
-{{type.type}}
-----
+= {{type.title}} Configuration
+
+// tag::config[]
 {{#if type.description}}
-{{type.description}}
+    {{type.description}}
 {{/if}}
+
+Type: {{type.typeReference}}
+
 {{#if type.standalone}}
 This is a standalone configuration type, prefix from configuration root: `{{type.prefix}}`
+{{else if type.prefix}}
+[source,text]
+.Config key
+----
+{{type.prefix}}
+----
 {{/if}}
+
 {{#if type.hasProvides}}This type provides the following service implementations:
 
 {{#each type.provides}}- `{{this}}`
 {{/each}}
 {{/if}}
-==== Configuration options
-
+== Configuration options
 {{#if hasRequired}}
 Required configuration options:
 [cols="3,3,2,5a"]
@@ -61,3 +69,4 @@ Optional configuration options:
 {{/unless}}{{/each}}
 |===
 {{/if}}
+// end::config[]
