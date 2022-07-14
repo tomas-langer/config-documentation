@@ -122,10 +122,10 @@ class ConfigDocumentation {
         // sort alphabetically by page title
         generatedFiles.sort((a, b) -> titleFromFileName(a).compareTo(titleFromFileName(b)));
         // print out the list of files to be added to sitegen.yaml
-        System.out.println("Update sitegen.yaml with the following values (Config docs section)");
+        System.out.println("Update config/config_reference with the following values:");
 
         for (String generatedFile : generatedFiles) {
-            System.out.println("            - \"" + generatedFile + "\"");
+            System.out.println("- xref:{rootdir}/config/" + generatedFile + "[" + titleFromFileName(generatedFile) + "]");
         }
     }
 
@@ -137,7 +137,7 @@ class ConfigDocumentation {
             if (i != -1) {
                 String simpleName = title.substring(i + 1);
                 String thePackage = title.substring(0, i);
-                title = simpleName + " (" + thePackage + ")";
+                title = simpleName + " (" + thePackage.replace('_', '.') + ")";
             }
         }
         return title;
@@ -183,9 +183,13 @@ class ConfigDocumentation {
         Matcher m = MODULE_PATTERN.matcher(type);
         if (m.matches()) {
             String moduleName = m.group(1);
-            return "link:{javadoc-base-url}/" + moduleName + "/" + type + "[" + type + "]";
+            return "link:{javadoc-base-url}/" + moduleName + "/" + toJavadocLink(type) + "[" + type + "]";
         }
         return type;
+    }
+
+    private String toJavadocLink(String type) {
+        return type.replace('.', '/') + ".html";
     }
 
     private void translateHtml(Map<String, CmType> configuredTypes) {
