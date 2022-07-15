@@ -7,6 +7,13 @@ import static org.hamcrest.MatcherAssert.assertThat;
 
 class ConfigDocumentationTest {
     @Test
+    void testTitleFromFileName() {
+        String original = "io_helidon_tracing_jaeger_JaegerTracerBuilder.adoc";
+        String expected = "JaegerTracerBuilder (tracing.jaeger)";
+        String actual = ConfigDocumentation.titleFromFileName(original);
+        assertThat(actual, is(expected));
+    }
+    @Test
     void testHtmlParagraph() {
         String original = """
                 First

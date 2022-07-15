@@ -129,8 +129,12 @@ class ConfigDocumentation {
         }
     }
 
-    private String titleFromFileName(String fileName) {
+    static String titleFromFileName(String fileName) {
         String title = fileName;
+        // string .adoc
+        if (title.endsWith(".adoc")) {
+            title = title.substring(0, title.length() - 5);
+        }
         if (title.startsWith("io_helidon_")) {
             title = title.substring("io_helidon_".length());
             int i = title.lastIndexOf('_');
@@ -239,7 +243,8 @@ class ConfigDocumentation {
             sortOptions(type);
             CharSequence fileContent = typeFile(template, type, relativePath);
 
-            String fileName = type.getType().replace('.', '_') + ".adoc";
+            String fileName = fileName(type.getType());
+
             Path typePath = modulePath.resolve(fileName);
             generatedFiles.add(fileName);
             // Write the target type
@@ -251,7 +256,9 @@ class ConfigDocumentation {
             if (!type.getAnnotatedType().startsWith(type.getType())) {
                 // generate two docs, just to make sure we do not have a conflict
                 // example: Zipkin and Jaeger generate target type io.opentracing.Tracer, yet we need separate documents
-                Path annotatedTypePath = modulePath.resolve(type.getAnnotatedType() + ".adoc");
+                fileName = fileName(type.getAnnotatedType());
+                Path annotatedTypePath = modulePath.resolve(fileName);
+                generatedFiles.add(fileName);
                 // Write the annotated type (needed for Jaeger & Zipkin that produce the same target)
                 Files.writeString(annotatedTypePath,
                                   fileContent,
@@ -259,6 +266,10 @@ class ConfigDocumentation {
                                   StandardOpenOption.CREATE);
             }
         }
+    }
+
+    private static String fileName(String typeName) {
+        return typeName.replace('.', '_') + ".adoc";
     }
 
     private static void sortOptions(CmType type) {
