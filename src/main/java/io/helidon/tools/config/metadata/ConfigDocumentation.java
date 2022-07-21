@@ -26,7 +26,6 @@ import java.nio.file.StandardOpenOption;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.Enumeration;
 import java.util.HashMap;
@@ -72,6 +71,48 @@ class ConfigDocumentation {
         this.modulePredicate = modulePredicate;
     }
 
+    static String titleFromFileName(String fileName) {
+        String title = fileName;
+        // string .adoc
+        if (title.endsWith(".adoc")) {
+            title = title.substring(0, title.length() - 5);
+        }
+        if (title.startsWith("io_helidon_")) {
+            title = title.substring("io_helidon_".length());
+            int i = title.lastIndexOf('_');
+            if (i != -1) {
+                String simpleName = title.substring(i + 1);
+                String thePackage = title.substring(0, i);
+                title = simpleName + " (" + thePackage.replace('_', '.') + ")";
+            }
+        }
+        return title;
+    }
+
+    // translate HTML to asciidoc
+    static String translateHtml(String text) {
+        String result = text;
+        // <p>
+        result = result.replaceAll("\n\\s*<p>", "\n");
+        result = result.replaceAll("\\s*<p>", "\n");
+        result = result.replaceAll("</p>", "");
+        // <ul><nl><li>
+        result = result.replaceAll("\\s*</li>\\s*", "");
+        result = result.replaceAll("\\s*</ul>\\s*", "\n\n");
+        result = result.replaceAll("\\s*</nl>\\s*", "\n\n");
+        result = result.replaceAll("\n\\s*<ul>\\s*", "\n");
+        result = result.replaceAll("\\s*<ul>\\s*", "\n");
+        result = result.replaceAll("\n\\s*<nl>\\s*", "\n");
+        result = result.replaceAll("\\s*<nl>\\s*", "\n");
+        result = result.replaceAll("<li>\\s*", "\n- ");
+        // also fix javadoc issues
+        // {@value}
+        result = result.replaceAll("\\{@value\\s+#?(.*?)}", "`$1`");
+        // {@link}
+        result = result.replaceAll("\\{@link\\s+#?(.*?)}", "`$1`");
+        return result;
+    }
+
     void process() throws Exception {
         Handlebars handlebars = new Handlebars();
         URL resource = ConfigDocumentation.class.getResource("/type-docs.adoc.hbs");
@@ -115,7 +156,7 @@ class ConfigDocumentation {
         for (CmModule module : allModules) {
             if (modulePredicate.test(module.getModule())) {
                 // document module that is included by the predicate
-                moduleDocs(template, path, relativePath, module, generatedFiles);
+                moduleDocs(configuredTypes, template, path, relativePath, module, generatedFiles);
             }
         }
 
@@ -126,30 +167,6 @@ class ConfigDocumentation {
 
         for (String generatedFile : generatedFiles) {
             System.out.println("- xref:{rootdir}/config/" + generatedFile + "[" + titleFromFileName(generatedFile) + "]");
-        }
-    }
-
-    static String titleFromFileName(String fileName) {
-        String title = fileName;
-        // string .adoc
-        if (title.endsWith(".adoc")) {
-            title = title.substring(0, title.length() - 5);
-        }
-        if (title.startsWith("io_helidon_")) {
-            title = title.substring("io_helidon_".length());
-            int i = title.lastIndexOf('_');
-            if (i != -1) {
-                String simpleName = title.substring(i + 1);
-                String thePackage = title.substring(0, i);
-                title = simpleName + " (" + thePackage.replace('_', '.') + ")";
-            }
-        }
-        return title;
-    }
-
-    private void addTitle(Map<String, CmType> configuredTypes) {
-        for (CmType value : configuredTypes.values()) {
-            value.setTitle(title(value.getType()));
         }
     }
 
@@ -167,71 +184,8 @@ class ConfigDocumentation {
         return title;
     }
 
-    private void resolveTypeReference(Map<String, CmType> configuredTypes) {
-        for (CmType value : configuredTypes.values()) {
-            value.setTypeReference(resolveTypeReference(value.getType()));
-        }
-    }
-
-    private String resolveTypeReference(String type) {
-        if (type.startsWith("io.helidon")) {
-            // our type
-            return resolveModuleFromType(type);
-        } else {
-            // no reference
-            return type;
-        }
-    }
-
-    private String resolveModuleFromType(String type) {
-        Matcher m = MODULE_PATTERN.matcher(type);
-        if (m.matches()) {
-            String moduleName = m.group(1);
-            return "link:{javadoc-base-url}/" + moduleName + "/" + toJavadocLink(type) + "[" + type + "]";
-        }
-        return type;
-    }
-
-    private String toJavadocLink(String type) {
-        return type.replace('.', '/') + ".html";
-    }
-
-    private void translateHtml(Map<String, CmType> configuredTypes) {
-        for (CmType value : configuredTypes.values()) {
-            value.getOptions().forEach(this::translateHtml);
-        }
-    }
-
-    private void translateHtml(CmOption option) {
-        String description = option.getDescription();
-        option.setDescription(translateHtml(description));
-    }
-
-    // translate HTML to asciidoc
-    static String translateHtml(String text) {
-        String result = text;
-        // <p>
-        result = result.replaceAll("\n\\s*<p>", "\n");
-        result = result.replaceAll("\\s*<p>", "\n");
-        result = result.replaceAll("</p>", "");
-        // <ul><nl><li>
-        result = result.replaceAll("\\s*</li>\\s*", "");
-        result = result.replaceAll("\\s*</ul>\\s*", "\n\n");
-        result = result.replaceAll("\\s*</nl>\\s*", "\n\n");
-        result = result.replaceAll("\n\\s*<ul>\\s*", "\n");
-        result = result.replaceAll("\\s*<ul>\\s*", "\n");
-        result = result.replaceAll("\n\\s*<nl>\\s*", "\n");
-        result = result.replaceAll("\\s*<nl>\\s*", "\n");
-        result = result.replaceAll("<li>\\s*", "\n- ");
-        // also fix javadoc issues
-        // {@value}
-        result = result.replaceAll("\\{@value\\s+#?(.*?)}", "`$1`");
-        // {@link}
-        result = result.replaceAll("\\{@link\\s+#?(.*?)}", "`$1`");
-        return result;
-    }
-
-    private static void moduleDocs(Template template,
+    private static void moduleDocs(Map<String, CmType> configuredTypes,
+                                   Template template,
                                    Path modulePath,
                                    String relativePath,
                                    CmModule module,
@@ -241,7 +195,7 @@ class ConfigDocumentation {
         // docs/io.helidon.common.configurable/LruCache.adoc
         for (CmType type : module.getTypes()) {
             sortOptions(type);
-            CharSequence fileContent = typeFile(template, type, relativePath);
+            CharSequence fileContent = typeFile(configuredTypes, template, type, relativePath);
 
             String fileName = fileName(type.getType());
 
@@ -278,7 +232,10 @@ class ConfigDocumentation {
         type.setOptions(options);
     }
 
-    private static CharSequence typeFile(Template template, CmType type, String relativePath) throws IOException {
+    private static CharSequence typeFile(Map<String, CmType> configuredTypes,
+                                         Template template,
+                                         CmType type,
+                                         String relativePath) throws IOException {
         boolean hasRequired = false;
         boolean hasOptional = false;
         for (CmOption option : type.getOptions()) {
@@ -287,7 +244,7 @@ class ConfigDocumentation {
             } else {
                 hasOptional = true;
             }
-            option.setRefType(mapType(option, relativePath));
+            option.setRefType(mapType(configuredTypes, option, relativePath));
         }
 
         Map<String, Object> context = Map.of("year", ZonedDateTime.now().getYear(),
@@ -297,7 +254,7 @@ class ConfigDocumentation {
         return template.apply(context);
     }
 
-    private static String mapType(CmOption option, String relativePath) {
+    private static String mapType(Map<String, CmType> configuredTypes, CmOption option, String relativePath) {
         String type = option.getType();
         String mapped = TYPE_MAPPING.get(type);
         CmOption.Kind kind = option.getKind();
@@ -309,16 +266,47 @@ class ConfigDocumentation {
                 return mapAllowedValues(option, kind, displayType);
             }
             if (option.isProvider()) {
-                return byKind(kind, type) + " (service provider interface)";
-            }
-            if (type.startsWith("io.helidon")) {
-                if (type.equals("io.helidon.config.Config")) {
-                    return "Map&lt;string, string&gt; (documented for specific cases)";
+                StringBuilder typeString = new StringBuilder(byKind(kind, type));
+                typeString.append(" (service provider interface)");
+
+                // let's try to locate available service implementations on classpath
+                List<CmType> providers = findProviders(configuredTypes, type);
+                if (!providers.isEmpty()) {
+                    typeString.append("\n\nSuch as:\n\n");
+                    for (CmType provider : providers) {
+                        String linkText = displayType(CmOption.Kind.VALUE, provider.getType());
+                        if (provider.getPrefix() != null) {
+                            linkText = provider.getPrefix() + " (" + linkText + ")";
+                        }
+                        typeString.append(" - ")
+                                .append(toLink(relativePath, provider.getType(), linkText));
+                        typeString.append("\n");
+                    }
+                    typeString.append("\n");
                 }
-                return "xref:" + relativePath + type.replace('.', '_') + ".adoc[" + displayType + "]";
+                return typeString.toString();
             }
+            return toLink(relativePath, type, displayType);
         }
         return displayType;
+    }
+
+    private static String toLink(String relativePath, String type, String displayType) {
+        if (type.startsWith("io.helidon")) {
+            if (type.equals("io.helidon.config.Config")) {
+                return "Map&lt;string, string&gt; (documented for specific cases)";
+            }
+            return "xref:" + relativePath + type.replace('.', '_') + ".adoc[" + displayType + "]";
+        }
+        return displayType;
+    }
+
+    private static List<CmType> findProviders(Map<String, CmType> configuredTypes, String providerInterface) {
+        return configuredTypes.values()
+                .stream()
+                .filter(it -> it.getProvides() != null)
+                .filter(it -> it.getProvides().contains(providerInterface))
+                .toList();
     }
 
     private static String displayType(CmOption.Kind kind, String type) {
@@ -359,6 +347,52 @@ class ConfigDocumentation {
 
         return displayType
                 + " (" + values.stream().map(CmAllowedValue::getValue).collect(Collectors.joining(", ")) + ")";
+    }
+
+    private void addTitle(Map<String, CmType> configuredTypes) {
+        for (CmType value : configuredTypes.values()) {
+            value.setTitle(title(value.getType()));
+        }
+    }
+
+    private void resolveTypeReference(Map<String, CmType> configuredTypes) {
+        for (CmType value : configuredTypes.values()) {
+            value.setTypeReference(resolveTypeReference(value.getType()));
+        }
+    }
+
+    private String resolveTypeReference(String type) {
+        if (type.startsWith("io.helidon")) {
+            // our type
+            return resolveModuleFromType(type);
+        } else {
+            // no reference
+            return type;
+        }
+    }
+
+    private String resolveModuleFromType(String type) {
+        Matcher m = MODULE_PATTERN.matcher(type);
+        if (m.matches()) {
+            String moduleName = m.group(1);
+            return "link:{javadoc-base-url}/" + moduleName + "/" + toJavadocLink(type) + "[" + type + "]";
+        }
+        return type;
+    }
+
+    private String toJavadocLink(String type) {
+        return type.replace('.', '/') + ".html";
+    }
+
+    private void translateHtml(Map<String, CmType> configuredTypes) {
+        for (CmType value : configuredTypes.values()) {
+            value.getOptions().forEach(this::translateHtml);
+        }
+    }
+
+    private void translateHtml(CmOption option) {
+        String description = option.getDescription();
+        option.setDescription(translateHtml(description));
     }
 
     private void resolveMerges(Map<String, CmType> configuredTypes) {
