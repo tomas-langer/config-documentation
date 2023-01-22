@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Oracle and/or its affiliates.
+ * Copyright (c) 2022, 2023 Oracle and/or its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -31,6 +31,7 @@ import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.ListIterator;
 import java.util.Map;
 import java.util.function.Predicate;
 import java.util.regex.Matcher;
@@ -484,12 +485,19 @@ class ConfigDocumentation {
     }
 
     private void resolveInheritance(Map<String, CmType> resolved, CmType next) {
-        for (String inherit : next.getInherits()) {
-            CmType cmType = resolved.get(inherit);
-            List<CmOption> options = new ArrayList<>(next.getOptions());
-            options.addAll(cmType.getOptions());
-            next.setOptions(options);
+        // Allow option info on subclasses or impls of interfaces to override option info from higher.
+        Map<String, CmOption> options = new HashMap<>();
+
+        List<String> inherits = next.getInherits();
+        // Traverse from higher to lower in the inheritance structure so more specific settings take precedence.
+        for (ListIterator<String> inheritsIt = inherits.listIterator(inherits.size()); inheritsIt.hasPrevious();) {
+            resolved.get(inheritsIt.previous())
+                    .getOptions()
+                    .forEach(inheritedOption -> options.put(inheritedOption.getKey(), inheritedOption));
         }
+        // Now apply options from the type being processed.
+        next.getOptions().forEach(opt -> options.put(opt.getKey(), opt));
+        next.setOptions(new ArrayList<>(options.values()));
         next.setInherits(null);
     }
 }
