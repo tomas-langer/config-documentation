@@ -32,8 +32,10 @@ public class Main {
      */
     public static void main(String[] args) throws Exception {
         if (args.length != 2 && args.length != 3) {
-            throw new IllegalArgumentException("This tool requires two parameters: module name, the target path and optionally "
-                                                       + "relative path to the generated docs from the file they will be included in");
+            throw new IllegalArgumentException("This tool requires two parameters: module name (can be * for all),"
+                                                       + " the target path and optionally "
+                                                       + "relative path to the generated docs from the file they will be "
+                                                       + "included in");
         }
         String module = args[0];
         String targetPath = args[1];
