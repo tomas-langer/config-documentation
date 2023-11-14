@@ -33,6 +33,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -191,12 +192,21 @@ class ConfigDocumentation {
                                    String relativePath,
                                    CmModule module,
                                    List<String> generatedFiles) throws IOException {
+        Function<String, Boolean> exists = type -> {
+            // 1: check if part of this processing
+            if (configuredTypes.containsKey(type)) {
+                return true;
+            }
+            // 2: check if exists in target directory
+            String path = type.replace('.', '_') + ".adoc";
+            return Files.exists(modulePath.resolve(path));
+        };
         System.out.println("Documenting module " + module.getModule());
         // each type will have its own, such as:
         // docs/io.helidon.common.configurable/LruCache.adoc
         for (CmType type : module.getTypes()) {
             sortOptions(type);
-            CharSequence fileContent = typeFile(configuredTypes, template, type, relativePath);
+            CharSequence fileContent = typeFile(configuredTypes, template, type, relativePath, exists);
 
             String fileName = fileName(type.getType());
 
@@ -236,7 +246,8 @@ class ConfigDocumentation {
     private static CharSequence typeFile(Map<String, CmType> configuredTypes,
                                          Template template,
                                          CmType type,
-                                         String relativePath) throws IOException {
+                                         String relativePath,
+                                         Function<String, Boolean> exists) throws IOException {
         boolean hasRequired = false;
         boolean hasOptional = false;
         for (CmOption option : type.getOptions()) {
@@ -245,7 +256,7 @@ class ConfigDocumentation {
             } else {
                 hasOptional = true;
             }
-            option.setRefType(mapType(configuredTypes, option, relativePath));
+            option.setRefType(mapType(configuredTypes, option, relativePath, exists));
         }
 
         Map<String, Object> context = Map.of("year", ZonedDateTime.now().getYear(),
@@ -255,7 +266,10 @@ class ConfigDocumentation {
         return template.apply(context);
     }
 
-    private static String mapType(Map<String, CmType> configuredTypes, CmOption option, String relativePath) {
+    private static String mapType(Map<String, CmType> configuredTypes,
+                                  CmOption option,
+                                  String relativePath,
+                                  Function<String, Boolean> exists) {
         String type = option.getType();
         String mapped = TYPE_MAPPING.get(type);
         CmOption.Kind kind = option.getKind();
@@ -267,11 +281,13 @@ class ConfigDocumentation {
                 return mapAllowedValues(option, kind, displayType);
             }
             if (option.isProvider()) {
+                String providerType = option.getProviderType();
+                providerType = (providerType == null) ? type : providerType;
                 StringBuilder typeString = new StringBuilder(byKind(kind, type));
                 typeString.append(" (service provider interface)");
 
                 // let's try to locate available service implementations on classpath
-                List<CmType> providers = findProviders(configuredTypes, type);
+                List<CmType> providers = findProviders(configuredTypes, providerType);
                 if (!providers.isEmpty()) {
                     typeString.append("\n\nSuch as:\n\n");
                     for (CmType provider : providers) {
@@ -280,24 +296,27 @@ class ConfigDocumentation {
                             linkText = provider.getPrefix() + " (" + linkText + ")";
                         }
                         typeString.append(" - ")
-                                .append(toLink(relativePath, provider.getType(), linkText));
+                                .append(toLink(relativePath, provider.getType(), linkText, exists));
                         typeString.append("\n");
                     }
                     typeString.append("\n");
                 }
                 return typeString.toString();
             }
-            return toLink(relativePath, type, displayType);
+            return toLink(relativePath, type, displayType, exists);
         }
         return displayType;
     }
 
-    private static String toLink(String relativePath, String type, String displayType) {
+    private static String toLink(String relativePath, String type, String displayType, Function<String, Boolean> exists) {
         if (type.startsWith("io.helidon")) {
-            if (type.equals("io.helidon.config.Config")) {
+            if (type.equals("io.helidon.config.Config") || type.equals("io.helidon.common.config.Config")) {
                 return "Map&lt;string, string&gt; (documented for specific cases)";
             }
-            return "xref:" + relativePath + type.replace('.', '_') + ".adoc[" + displayType + "]";
+            // make sure the file exists
+            if (exists.apply(type)) {
+                return "xref:" + relativePath + type.replace('.', '_') + ".adoc[" + displayType + "]";
+            }
         }
         return displayType;
     }
@@ -490,7 +509,7 @@ class ConfigDocumentation {
 
         List<String> inherits = next.getInherits();
         // Traverse from higher to lower in the inheritance structure so more specific settings take precedence.
-        for (ListIterator<String> inheritsIt = inherits.listIterator(inherits.size()); inheritsIt.hasPrevious();) {
+        for (ListIterator<String> inheritsIt = inherits.listIterator(inherits.size()); inheritsIt.hasPrevious(); ) {
             resolved.get(inheritsIt.previous())
                     .getOptions()
                     .forEach(inheritedOption -> options.put(inheritedOption.getKey(), inheritedOption));

@@ -27,6 +27,7 @@ public class CmOption {
     private boolean experimental = false;
     private boolean deprecated = false;
     private boolean provider = false;
+    private String providerType;
     private boolean merge = false;
     private Kind kind = Kind.VALUE;
     private String refType;
@@ -126,8 +127,16 @@ public class CmOption {
         return provider;
     }
 
+    public String getProviderType() {
+        return providerType;
+    }
+
     public void setProvider(boolean provider) {
         this.provider = provider;
+    }
+
+    public void setProviderType(String providerType) {
+        this.providerType = providerType;
     }
 
     public boolean isMerge() {
