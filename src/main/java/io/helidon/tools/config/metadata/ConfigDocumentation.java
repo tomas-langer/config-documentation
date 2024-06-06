@@ -224,54 +224,64 @@ class ConfigDocumentation {
         // each type will have its own, such as:
         // docs/io.helidon.common.configurable/LruCache.adoc
         for (CmType type : module.getTypes()) {
-            sortOptions(type);
+            generatetype(generatedFiles, configuredTypes, template, modulePath, type, relativePath, exists);
+        }
+    }
 
-            String fileName = fileName(type.getType());
-            Path typePath = modulePath.resolve(fileName);
+    private static void generatetype(List<String> generatedFiles,
+                                     Map<String, CmType> configuredTypes,
+                                     Template template,
+                                     Path modulePath,
+                                     CmType type,
+                                     String relativePath,
+                                     Function<String, Boolean> exists) throws IOException {
+        sortOptions(type);
 
-            if (Files.exists(typePath)) {
-                // check if maybe the file content is not modified
-                CharSequence current = typeFile(configuredTypes,
-                                                template,
-                                                type,
-                                                relativePath,
-                                                exists,
-                                                currentCopyrightYears(typePath));
-                if (sameContent(typePath, current)) {
-                    generatedFiles.add(fileName);
-                    return;
-                }
+        String fileName = fileName(type.getType());
+        Path typePath = modulePath.resolve(fileName);
+
+        if (Files.exists(typePath)) {
+            // check if maybe the file content is not modified
+            CharSequence current = typeFile(configuredTypes,
+                                            template,
+                                            type,
+                                            relativePath,
+                                            exists,
+                                            currentCopyrightYears(typePath));
+            if (sameContent(typePath, current)) {
+                generatedFiles.add(fileName);
+                return;
             }
+        }
 
-            CharSequence fileContent = typeFile(configuredTypes,
-                                                template,
-                                                type,
-                                                relativePath,
-                                                exists,
-                                                newCopyrightYears(typePath));
+        CharSequence fileContent = typeFile(configuredTypes,
+                                            template,
+                                            type,
+                                            relativePath,
+                                            exists,
+                                            newCopyrightYears(typePath));
 
 
 
 
+        generatedFiles.add(fileName);
+        // Write the target type
+        Files.writeString(typePath,
+                          fileContent,
+                          StandardOpenOption.TRUNCATE_EXISTING,
+                          StandardOpenOption.CREATE);
+
+        if (!type.getAnnotatedType().startsWith(type.getType())) {
+            // generate two docs, just to make sure we do not have a conflict
+            // example: Zipkin and Jaeger generate target type io.opentracing.Tracer, yet we need separate documents
+            fileName = fileName(type.getAnnotatedType());
+            Path annotatedTypePath = modulePath.resolve(fileName);
             generatedFiles.add(fileName);
-            // Write the target type
-            Files.writeString(typePath,
+            // Write the annotated type (needed for Jaeger & Zipkin that produce the same target)
+            Files.writeString(annotatedTypePath,
                               fileContent,
                               StandardOpenOption.TRUNCATE_EXISTING,
                               StandardOpenOption.CREATE);
-
-            if (!type.getAnnotatedType().startsWith(type.getType())) {
-                // generate two docs, just to make sure we do not have a conflict
-                // example: Zipkin and Jaeger generate target type io.opentracing.Tracer, yet we need separate documents
-                fileName = fileName(type.getAnnotatedType());
-                Path annotatedTypePath = modulePath.resolve(fileName);
-                generatedFiles.add(fileName);
-                // Write the annotated type (needed for Jaeger & Zipkin that produce the same target)
-                Files.writeString(annotatedTypePath,
-                                  fileContent,
-                                  StandardOpenOption.TRUNCATE_EXISTING,
-                                  StandardOpenOption.CREATE);
-            }
         }
     }
 
