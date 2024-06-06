@@ -224,11 +224,11 @@ class ConfigDocumentation {
         // each type will have its own, such as:
         // docs/io.helidon.common.configurable/LruCache.adoc
         for (CmType type : module.getTypes()) {
-            generatetype(generatedFiles, configuredTypes, template, modulePath, type, relativePath, exists);
+            generateType(generatedFiles, configuredTypes, template, modulePath, type, relativePath, exists);
         }
     }
 
-    private static void generatetype(List<String> generatedFiles,
+    private static void generateType(List<String> generatedFiles,
                                      Map<String, CmType> configuredTypes,
                                      Template template,
                                      Path modulePath,
@@ -240,6 +240,7 @@ class ConfigDocumentation {
         String fileName = fileName(type.getType());
         Path typePath = modulePath.resolve(fileName);
 
+        boolean sameContent = false;
         if (Files.exists(typePath)) {
             // check if maybe the file content is not modified
             CharSequence current = typeFile(configuredTypes,
@@ -249,8 +250,7 @@ class ConfigDocumentation {
                                             exists,
                                             currentCopyrightYears(typePath));
             if (sameContent(typePath, current)) {
-                generatedFiles.add(fileName);
-                return;
+                sameContent = true;
             }
         }
 
@@ -265,11 +265,13 @@ class ConfigDocumentation {
 
 
         generatedFiles.add(fileName);
-        // Write the target type
-        Files.writeString(typePath,
-                          fileContent,
-                          StandardOpenOption.TRUNCATE_EXISTING,
-                          StandardOpenOption.CREATE);
+        if (!sameContent) {
+            // Write the target type
+            Files.writeString(typePath,
+                              fileContent,
+                              StandardOpenOption.TRUNCATE_EXISTING,
+                              StandardOpenOption.CREATE);
+        }
 
         if (!type.getAnnotatedType().startsWith(type.getType())) {
             // generate two docs, just to make sure we do not have a conflict
@@ -277,11 +279,13 @@ class ConfigDocumentation {
             fileName = fileName(type.getAnnotatedType());
             Path annotatedTypePath = modulePath.resolve(fileName);
             generatedFiles.add(fileName);
-            // Write the annotated type (needed for Jaeger & Zipkin that produce the same target)
-            Files.writeString(annotatedTypePath,
-                              fileContent,
-                              StandardOpenOption.TRUNCATE_EXISTING,
-                              StandardOpenOption.CREATE);
+            if (!sameContent) {
+                // Write the annotated type (needed for Jaeger & Zipkin that produce the same target)
+                Files.writeString(annotatedTypePath,
+                                  fileContent,
+                                  StandardOpenOption.TRUNCATE_EXISTING,
+                                  StandardOpenOption.CREATE);
+            }
         }
     }
 
