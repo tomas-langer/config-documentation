@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, 2023 Oracle and/or its affiliates.
+ * Copyright (c) 2022, 2024 Oracle and/or its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,6 +38,7 @@ import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import com.github.jknack.handlebars.Handlebars;
 import com.github.jknack.handlebars.Template;
@@ -48,6 +49,7 @@ import org.eclipse.yasson.YassonConfig;
 
 class ConfigDocumentation {
     private static final Pattern MODULE_PATTERN = Pattern.compile("(.*?)(\\.spi)?\\.([a-zA-Z0-9]*?)");
+    private static final Pattern COPYRIGHT_LINE_PATTERN = Pattern.compile(".*Copyright \\(c\\) (.*) Oracle and/or its affiliates.");
     private static final Jsonb JSON_B = JsonbBuilder.create(new YassonConfig().withFailOnUnknownProperties(true));
     private static final Map<String, String> TYPE_MAPPING;
 
@@ -112,7 +114,24 @@ class ConfigDocumentation {
         result = result.replaceAll("\\{@value\\s+#?(.*?)}", "`$1`");
         // {@link}
         result = result.replaceAll("\\{@link\\s+#?(.*?)}", "`$1`");
-        return result;
+        // table - keep as is, just a passthrough
+        StringBuilder theBuilder = new StringBuilder();
+        int lastIndex = 0;
+        while (true) {
+            int index = result.indexOf("<table", lastIndex);
+            if (index == -1) {
+                // add the rest of the string
+                theBuilder.append(result.substring(lastIndex));
+                break;
+            }
+            int endIndex = result.indexOf("</table>", index);
+            theBuilder.append(result.substring(lastIndex, index));
+            theBuilder.append("\n++++\n");
+            theBuilder.append(result.substring(index, endIndex + 8));
+            theBuilder.append("\n++++\n");
+            lastIndex = endIndex + 8;
+        }
+        return theBuilder.toString();
     }
 
     void process() throws Exception {
@@ -206,11 +225,34 @@ class ConfigDocumentation {
         // docs/io.helidon.common.configurable/LruCache.adoc
         for (CmType type : module.getTypes()) {
             sortOptions(type);
-            CharSequence fileContent = typeFile(configuredTypes, template, type, relativePath, exists);
 
             String fileName = fileName(type.getType());
-
             Path typePath = modulePath.resolve(fileName);
+
+            if (Files.exists(typePath)) {
+                // check if maybe the file content is not modified
+                CharSequence current = typeFile(configuredTypes,
+                                                template,
+                                                type,
+                                                relativePath,
+                                                exists,
+                                                currentCopyrightYears(typePath));
+                if (sameContent(typePath, current)) {
+                    generatedFiles.add(fileName);
+                    return;
+                }
+            }
+
+            CharSequence fileContent = typeFile(configuredTypes,
+                                                template,
+                                                type,
+                                                relativePath,
+                                                exists,
+                                                newCopyrightYears(typePath));
+
+
+
+
             generatedFiles.add(fileName);
             // Write the target type
             Files.writeString(typePath,
@@ -233,6 +275,14 @@ class ConfigDocumentation {
         }
     }
 
+    private static boolean sameContent(Path typePath, CharSequence current) {
+        try {
+            return Files.readString(typePath).equals(current.toString());
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     private static String fileName(String typeName) {
         return typeName.replace('.', '_') + ".adoc";
     }
@@ -247,7 +297,8 @@ class ConfigDocumentation {
                                          Template template,
                                          CmType type,
                                          String relativePath,
-                                         Function<String, Boolean> exists) throws IOException {
+                                         Function<String, Boolean> exists,
+                                         String copyrightYears) throws IOException {
         boolean hasRequired = false;
         boolean hasOptional = false;
         for (CmOption option : type.getOptions()) {
@@ -259,11 +310,49 @@ class ConfigDocumentation {
             option.setRefType(mapType(configuredTypes, option, relativePath, exists));
         }
 
-        Map<String, Object> context = Map.of("year", ZonedDateTime.now().getYear(),
+        Map<String, Object> context = Map.of("year", copyrightYears,
                                              "hasRequired", hasRequired,
                                              "hasOptional", hasOptional,
                                              "type", type);
         return template.apply(context);
+    }
+
+    private static String newCopyrightYears(Path typePath) {
+        String currentYear = String.valueOf(ZonedDateTime.now().getYear());
+
+        if (Files.exists(typePath)) {
+            // get current copyright year
+            String copyrightYears = currentCopyrightYears(typePath);
+            if (copyrightYears == null) {
+                return currentYear;
+            }
+            if (copyrightYears.endsWith(currentYear)) {
+                return copyrightYears;
+            }
+            int index = copyrightYears.indexOf(',');
+            if (index == -1) {
+                return copyrightYears + ", " + currentYear;
+            }
+            return copyrightYears.substring(0, index) + ", " + currentYear;
+        }
+        return currentYear;
+    }
+
+    private static String currentCopyrightYears(Path typePath) {
+        try (var lines = Files.lines(typePath)) {
+            return lines.flatMap(line -> {
+                        Matcher matcher = COPYRIGHT_LINE_PATTERN.matcher(line);
+                        if (matcher.matches()) {
+                            return Stream.of(matcher.group(1));
+                        }
+                        return Stream.empty();
+                    })
+                    .findFirst()
+                    .orElse(null);
+        } catch (IOException e) {
+            e.printStackTrace();
+            return null;
+        }
     }
 
     private static String mapType(Map<String, CmType> configuredTypes,
@@ -453,7 +542,8 @@ class ConfigDocumentation {
             for (CmType cmType : remaining) {
                 for (CmOption option : cmType.getOptions()) {
                     if (option.isMerge()) {
-                        System.err.println("Option " + option.getKey() + ", merges: " + option.getType());
+                        System.err.println("Option " + option.getKey() + ", merges: " + option.getType() + " in "
+                                                   + cmType.getAnnotatedType());
                     }
                 }
 
